@@ -33,8 +33,8 @@ function __hmap_new --no-scope-shadowing
         return 1
     end
 
-    if set -q $name
-        echo "hmap new: variable '$name' already exists" >&2
+    if __is_live_hmap $name
+        echo "hmap new: '$name' already exists" >&2
         return 1
     end
 
@@ -47,11 +47,10 @@ function __hmap_new --no-scope-shadowing
 
     function $name --description __hmap_proxy --no-scope-shadowing
         set --local hmap (status current-function)
-        set --local registered "__hmap_$hmap"_registered
 
         # variable is dereferenced and proxy still in global scope
         # unset proxy function and fail
-        if not set -q $registered
+        if not __is_live_hmap $hmap
             echo "$hmap: hmap is out of scope" >&2
             functions -e $hmap
             return 1
@@ -62,6 +61,11 @@ function __hmap_new --no-scope-shadowing
     # register function to detect scope leakage
     set "__hmap_$name"_registered 1
     set "__hmap_$name"_keys
+end
+
+function __is_live_hmap --no-scope-shadowing
+    set --local name $argv[1]
+    set -q "__hmap_$name"_registered
 end
 
 function __is_hmap_proxy --no-scope-shadowing
@@ -80,8 +84,6 @@ function __hmap_dispatch --no-scope-shadowing
     switch $operation
         case set
             set --local key $argv[2]
-            set --local value $argv[3]
-
             set --local escaped (__normalise_hmap_key $key)
             set --local entry "__hmap_$hmap"_"$escaped"
 
@@ -89,7 +91,7 @@ function __hmap_dispatch --no-scope-shadowing
                 set -a $keys $key
             end
 
-            set $entry $value
+            set $entry $argv[3..]
 
         case get
             set --local key $argv[2]
