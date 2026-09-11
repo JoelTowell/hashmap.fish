@@ -26,66 +26,78 @@ function __hmap_constructor_help
 end
 
 function __hmap_new --no-scope-shadowing
-    set --local name $argv[1]
+    set --local hmap_name $argv[1]
 
-    if test -z "$name"
+    if test -z "$hmap_name"
         echo "hmap new: expected NAME" >&2
         return 1
     end
 
-    if __is_live_hmap $name
-        echo "hmap new: '$name' already exists" >&2
+    if __is_live_hmap
+        echo "hmap new: '$hmap_name' already exists" >&2
         return 1
     end
 
     # name may have gone out of scope and left stale proxy function
     # if type resolves to stale proxy we can overwrite it
-    if type -q $name; and not __is_hmap_proxy
-        echo "hmap new: command '$name' already exists" >&2
+    if type -q $hmap_name; and not __is_hmap_proxy
+        echo "hmap new: command '$hmap_name' already exists" >&2
         return 1
     end
 
-    function $name --description __hmap_proxy --no-scope-shadowing
-        set --local hmap (status current-function)
+    function $hmap_name --description __hmap_proxy --no-scope-shadowing
+        set --local hmap_name (status current-function)
 
         # variable is dereferenced and proxy still in global scope
         # unset proxy function and fail
-        if not __is_live_hmap $hmap
-            echo "$hmap: hmap is out of scope" >&2
-            functions -e $hmap
+        if not __is_live_hmap
+            echo "$hmap_name: hmap is out of scope" >&2
+            functions -e $hmap_name
             return 1
         end
         __hmap_dispatch $argv
     end
 
-    # register function to detect scope leakage
-    set "__hmap_$name"_registered 1
-    set "__hmap_$name"_keys
+    # register function creation to detect scope leakage
+    set (__hmap_registration_name) 1
 end
 
 function __is_live_hmap --no-scope-shadowing
-    set --local name $argv[1]
-    set -q "__hmap_$name"_registered
+    set -q (__hmap_registration_name)
+end
+
+function __hmap_variable_prefix --no-scope-shadowing
+    set --local normalised (__normalise_hmap_variable_string $hmap_name)
+    echo "__hmap_$normalised"
+end
+
+function __hmap_registration_name --no-scope-shadowing
+    echo (__hmap_variable_prefix)_registered
+end
+
+function __normalise_hmap_variable_string
+    string escape --style=var -- $argv[1]
 end
 
 function __is_hmap_proxy --no-scope-shadowing
-    functions -q $name; or return
+    functions -q $hmap_name; or return
 
-    set --local details (functions --details --verbose $name)
+    set --local details (functions --details --verbose $hmap_name)
 
     test "$details[5]" = __hmap_proxy
 end
 
 function __hmap_dispatch --no-scope-shadowing
     set --local operation $argv[1]
-
-    set --local keys "__hmap_$hmap"_keys
+    set --local prefix (__hmap_variable_prefix)
+    set --local keys "$prefix"_keys
 
     switch $operation
         case set
             set --local key $argv[2]
-            set --local escaped (__normalise_hmap_key $key)
-            set --local entry "__hmap_$hmap"_"$escaped"
+            set --local escaped (__normalise_hmap_variable_string $key)
+            # avoid potential namespace collision with registration and keys variables
+            set --local entry "$prefix"_entry_"$escaped"
 
             if not set -q $entry
                 set -a $keys $key
@@ -95,8 +107,8 @@ function __hmap_dispatch --no-scope-shadowing
 
         case get
             set --local key $argv[2]
-            set --local escaped (__normalise_hmap_key $key)
-            set --local entry "__hmap_$hmap"_"$escaped"
+            set --local escaped (__normalise_hmap_variable_string $key)
+            set --local entry "$prefix"_entry_"$escaped"
 
             if not set -q $entry
                 return 1
@@ -111,8 +123,8 @@ function __hmap_dispatch --no-scope-shadowing
             set --local vals
 
             for key in $$keys
-                set --local escaped (__normalise_hmap_key $key)
-                set --local entry "__hmap_$hmap"_"$escaped"
+                set --local escaped (__normalise_hmap_variable_string $key)
+                set --local entry "$prefix"_entry_"$escaped"
                 set -a vals $$entry
             end
             printf '%s\n' $vals
@@ -121,11 +133,7 @@ function __hmap_dispatch --no-scope-shadowing
             printf '%s\n' (count $$keys)
 
         case '*'
-            echo "$hmap: unknown operation '$operation'" >&2
+            echo "$hmap_name: unknown operation '$operation'" >&2
             return 2
     end
-end
-
-function __normalise_hmap_key
-    string escape --style=var -- $argv[1]
 end
