@@ -62,31 +62,6 @@ function __hmap_new --no-scope-shadowing
     set (__hmap_registration_name) 1
 end
 
-function __is_live_hmap --no-scope-shadowing
-    set -q (__hmap_registration_name)
-end
-
-function __hmap_variable_prefix --no-scope-shadowing
-    set --local normalised (__normalise_hmap_variable_string $hmap_name)
-    echo "__hmap_$normalised"
-end
-
-function __hmap_registration_name --no-scope-shadowing
-    echo (__hmap_variable_prefix)_registered
-end
-
-function __normalise_hmap_variable_string
-    string escape --style=var -- $argv[1]
-end
-
-function __is_hmap_proxy --no-scope-shadowing
-    functions -q $hmap_name; or return
-
-    set --local details (functions --details --verbose $hmap_name)
-
-    test "$details[5]" = __hmap_proxy
-end
-
 function __hmap_dispatch --no-scope-shadowing
     set --local operation $argv[1]
     set --local prefix (__hmap_variable_prefix)
@@ -94,27 +69,13 @@ function __hmap_dispatch --no-scope-shadowing
 
     switch $operation
         case set
-            set --local key $argv[2]
-            set --local escaped (__normalise_hmap_variable_string $key)
-            # avoid potential namespace collision with registration and keys variables
-            set --local entry "$prefix"_entry_"$escaped"
-
-            if not set -q $entry
-                set -a $keys $key
-            end
-
-            set $entry $argv[3..]
+            __hmap_set $argv[2..]
 
         case get
-            set --local key $argv[2]
-            set --local escaped (__normalise_hmap_variable_string $key)
-            set --local entry "$prefix"_entry_"$escaped"
+            __hmap_get $argv[2..]
 
-            if not set -q $entry
-                return 1
-            end
-
-            printf '%s\n' $$entry
+        case assign
+            __hmap_assign $argv[2..]
 
         case keys
             printf '%s\n' $$keys
@@ -136,4 +97,62 @@ function __hmap_dispatch --no-scope-shadowing
             echo "$hmap_name: unknown operation '$operation'" >&2
             return 2
     end
+end
+
+function __hmap_set --no-scope-shadowing
+    set --local key $argv[1]
+    set --local escaped (__normalise_hmap_variable_string $key)
+    set --local entry (__hmap_variable_prefix)_entry_"$escaped"
+
+    if not set -q $entry
+        set -a $keys $key
+    end
+
+    set $entry $argv[2..]
+end
+
+function __hmap_get --no-scope-shadowing
+    set --local key $argv[1]
+    set --local escaped (__normalise_hmap_variable_string $key)
+    set --local entry (__hmap_variable_prefix)_entry_"$escaped"
+
+    if not set -q $entry
+        return 1
+    end
+
+    printf '%s\n' $$entry
+end
+
+function __hmap_assign --no-scope-shadowing
+    set args $argv
+    for i in (seq 1 2 (count $args))
+        __hmap_set $args[$i] $args[(math $i + 1)]
+    end
+end
+
+# Proxy and lifecycle machinery
+
+function __is_live_hmap --no-scope-shadowing
+    set -q (__hmap_registration_name)
+end
+
+function __hmap_registration_name --no-scope-shadowing
+    echo (__hmap_variable_prefix)_registered
+end
+
+function __hmap_variable_prefix --no-scope-shadowing
+    set --local normalised (__normalise_hmap_variable_string $hmap_name)
+    echo "__hmap_$normalised"
+end
+
+function __normalise_hmap_variable_string
+    string escape --style=var -- $argv[1]
+end
+
+function __is_hmap_proxy --no-scope-shadowing
+    functions -q $hmap_name; or return
+
+    set --local details (functions --details --verbose $hmap_name)
+
+    test "$details[5]" = __hmap_proxy
 end
