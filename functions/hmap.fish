@@ -136,29 +136,30 @@ function __hmap_get --no-scope-shadowing
 end
 
 function __hmap_assign --no-scope-shadowing
-    set args $argv
+    set --local args $argv
     for i in (seq 1 2 (count $args))
         __hmap_set $args[$i] $args[(math $i + 1)]
     end
 end
 
 function __hmap_merge --no-scope-shadowing
-    set other $argv[1]
-    set other_keys ($other keys)
+    set --local other $argv[1]
+    set --local other_keys ($other keys)
 
     for key in $other_keys
-        set other_value ($other get $key)
+        set --local other_value ($other get $key)
         __hmap_set $key $other_value
     end
 end
 
 function __hmap_unset --no-scope-shadowing
-    set key $argv[1]
-    set escaped (__normalise_hmap_variable_string $key)
-    set entry (__hmap_variable_prefix)_entry_"$escaped"
+    set --local key $argv[1]
+    set --local escaped (__normalise_hmap_variable_string $key)
+    set --local entry (__hmap_variable_prefix)_entry_"$escaped"
     set -e $entry
+    
     set --local index (contains --index -- $key $$keys)
-    if test $index -ne -1
+    if test -n "$index"
         set -e {$keys}[$index]
     end
 end
