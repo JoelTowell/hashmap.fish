@@ -72,10 +72,22 @@ function __hmap_dispatch --no-scope-shadowing
             __hmap_set $argv[2..]
 
         case get
-            __hmap_get $argv[2..]
+            __hmap_get $argv[2..]; or return
+
+        case has
+            contains -- $argv[2] $$keys
 
         case assign
             __hmap_assign $argv[2..]
+
+        case merge
+            __hmap_merge $argv[2..]
+
+        case unset
+            __hmap_unset $argv[2..]
+
+        case clear
+            __hmap_clear
 
         case keys
             printf '%s\n' $$keys
@@ -127,6 +139,34 @@ function __hmap_assign --no-scope-shadowing
     set args $argv
     for i in (seq 1 2 (count $args))
         __hmap_set $args[$i] $args[(math $i + 1)]
+    end
+end
+
+function __hmap_merge --no-scope-shadowing
+    set other $argv[1]
+    set other_keys ($other keys)
+
+    for key in $other_keys
+        set other_value ($other get $key)
+        __hmap_set $key $other_value
+    end
+end
+
+function __hmap_unset --no-scope-shadowing
+    set key $argv[1]
+    set escaped (__normalise_hmap_variable_string $key)
+    set entry (__hmap_variable_prefix)_entry_"$escaped"
+    set -e $entry
+    set --local index (contains --index -- $key $$keys)
+    if test $index -ne -1
+        set -e {$keys}[$index]
+    end
+end
+
+function __hmap_clear --no-scope-shadowing
+    set --local keys (__hmap_variable_prefix)_keys
+    for key in $$keys
+        __hmap_unset $key
     end
 end
 
