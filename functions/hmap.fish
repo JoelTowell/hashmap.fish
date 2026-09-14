@@ -8,7 +8,7 @@ function hmap --no-scope-shadowing
 
     if test (count $argv) -ne 2
         echo "hmap: expected: hmap new NAME" >&2
-        return 2
+        return 1
     end
 
     switch $argv[1]
@@ -62,8 +62,7 @@ function __hmap_new --no-scope-shadowing
     set (__hmap_registration_name) 1
 end
 
-function __hmap_dispatch --no-scope-shadowing
-    set --local operation $argv[1]
+function __hmap_dispatch -a operation --no-scope-shadowing
     set --local prefix (__hmap_variable_prefix)
     set --local keys "$prefix"_keys
 
@@ -75,6 +74,10 @@ function __hmap_dispatch --no-scope-shadowing
             __hmap_get $argv[2..]; or return
 
         case has
+            if test (count $argv) -lt 2; or test -z "$argv[2]"
+                echo "$hmap_name: has expected KEY" >&2
+                return 1
+            end
             contains -- $argv[2] $$keys
 
         case assign
@@ -90,36 +93,27 @@ function __hmap_dispatch --no-scope-shadowing
             __hmap_clear
 
         case keys
-            if set -q {$keys}[1]
-                printf '%s\n' $$keys
-            end
+            set -q {$keys}[1]; and printf '%s\n' $$keys
 
         case values
-            set --local vals
-
-            for key in $$keys
-                set --local escaped (__normalise_hmap_variable_string $key)
-                set --local entry "$prefix"_entry_"$escaped"
-                set -a vals $$entry
-            end
-
-            if test (count $vals) -gt 0
-                printf '%s\n' $vals
-            end
+            __hmap_values
 
         case length
             printf '%s\n' (count $$keys)
 
         case '*'
             echo "$hmap_name: unknown operation '$operation'" >&2
-            return 2
+            return 1
     end
 end
 
-function __hmap_set --no-scope-shadowing
-    set --local key $argv[1]
-    set --local escaped (__normalise_hmap_variable_string $key)
-    set --local entry (__hmap_variable_prefix)_entry_"$escaped"
+function __hmap_set -a key --no-scope-shadowing
+    if test -z "$key"
+        echo "$hmap_name: set expected KEY" >&2
+        return 1
+    end
+
+    set --local entry (__hmap_entry_variable $prefix $key)
 
     if not set -q $entry
         set -a $keys $key
@@ -128,27 +122,46 @@ function __hmap_set --no-scope-shadowing
     set $entry $argv[2..]
 end
 
-function __hmap_get --no-scope-shadowing
-    set --local key $argv[1]
-    set --local escaped (__normalise_hmap_variable_string $key)
-    set --local entry (__hmap_variable_prefix)_entry_"$escaped"
+function __hmap_get -a key default --no-scope-shadowing
+    if test -z "$key"
+        echo "$hmap_name: get expected KEY" >&2
+        return 1
+    end
+
+    set --local entry (__hmap_entry_variable $prefix $key)
 
     if not set -q $entry
-        return 1
+        test -n "$default"; and printf '%s\n' $default; and return
+        or return
     end
 
     printf '%s\n' $$entry
 end
 
 function __hmap_assign --no-scope-shadowing
-    set --local args $argv
-    for i in (seq 1 2 (count $args))
-        __hmap_set $args[$i] $args[(math $i + 1)]
+    if test (math (count $argv) % 2) -ne 0
+        echo "$hmap_name: assign expected KEY VALUE pairs" >&2
+        return 1
+    end
+
+    for i in (seq 1 2 (count $argv))
+        __hmap_set $argv[$i] $argv[(math $i + 1)]
     end
 end
 
 function __hmap_merge --no-scope-shadowing
     set --local other $argv[1]
+
+    if test -z "$other"
+        echo "$hmap_name: merge expected NAME" >&2
+        return 1
+    end
+
+    if not __is_named_live_hmap $other
+        echo "$hmap_name: merge '$other' is not an hmap" >&2
+        return 1
+    end
+
     set --local other_keys ($other keys)
 
     for key in $other_keys
@@ -157,10 +170,13 @@ function __hmap_merge --no-scope-shadowing
     end
 end
 
-function __hmap_unset --no-scope-shadowing
-    set --local key $argv[1]
-    set --local escaped (__normalise_hmap_variable_string $key)
-    set --local entry (__hmap_variable_prefix)_entry_"$escaped"
+function __hmap_unset -a key --no-scope-shadowing
+    if test -z "$key"
+        echo "$hmap_name: unset expected KEY" >&2
+        return 1
+    end
+
+    set --local entry (__hmap_entry_variable $prefix $key)
     set -e $entry
 
     set --local index (contains --index -- $key $$keys)
@@ -170,10 +186,26 @@ function __hmap_unset --no-scope-shadowing
 end
 
 function __hmap_clear --no-scope-shadowing
-    set --local keys (__hmap_variable_prefix)_keys
     for key in $$keys
         __hmap_unset $key
     end
+end
+
+function __hmap_values --no-scope-shadowing
+    set --local vals
+
+    for key in $$keys
+        set --local entry (__hmap_entry_variable $prefix $key)
+        set -a vals $$entry
+    end
+
+    if test (count $vals) -gt 0
+        printf '%s\n' $vals
+    end
+end
+
+function __hmap_entry_variable -a prefix key
+    echo "$prefix"_entry_(__normalise_hmap_variable_string $key)
 end
 
 # Proxy and lifecycle machinery
@@ -201,4 +233,11 @@ function __is_hmap_proxy --no-scope-shadowing
     set --local details (functions --details --verbose $hmap_name)
 
     test "$details[5]" = __hmap_proxy
+end
+
+function __is_named_live_hmap -a name --no-scope-shadowing
+    set --local hmap_name $name
+    functions -q $hmap_name; or return 1
+    __is_hmap_proxy; or return 1
+    __is_live_hmap
 end
