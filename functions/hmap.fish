@@ -90,7 +90,9 @@ function __hmap_dispatch --no-scope-shadowing
             __hmap_clear
 
         case keys
-            printf '%s\n' $$keys
+            if set -q {$keys}[1]
+                printf '%s\n' $$keys
+            end
 
         case values
             set --local vals
@@ -100,7 +102,10 @@ function __hmap_dispatch --no-scope-shadowing
                 set --local entry "$prefix"_entry_"$escaped"
                 set -a vals $$entry
             end
-            printf '%s\n' $vals
+
+            if test (count $vals) -gt 0
+                printf '%s\n' $vals
+            end
 
         case length
             printf '%s\n' (count $$keys)
@@ -157,7 +162,7 @@ function __hmap_unset --no-scope-shadowing
     set --local escaped (__normalise_hmap_variable_string $key)
     set --local entry (__hmap_variable_prefix)_entry_"$escaped"
     set -e $entry
-    
+
     set --local index (contains --index -- $key $$keys)
     if test -n "$index"
         set -e {$keys}[$index]
