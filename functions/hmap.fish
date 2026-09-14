@@ -1,243 +1,244 @@
 function hmap --no-scope-shadowing
-    argparse h/help -- $argv
+    argparse --stop-nonopt h/help -- $argv
     or return
 
     if set -q _flag_help; or test (count $argv) -eq 0
-        __hmap_constructor_help; and return
-    end
-
-    if test (count $argv) -ne 2
-        echo "hmap: expected: hmap new NAME" >&2
-        return 1
+        __hmap_help
+        return 0
     end
 
     switch $argv[1]
-        case new
-            __hmap_new $argv[2..]
+        case new set get has unset assign merge clear keys values length
+            __hmap_$argv[1] $argv[2..]
         case '*'
-            echo "Unknown command: $argv[1]"
-            __hmap_constructor_help; and return 1
-    end
-end
-
-function __hmap_constructor_help
-    echo "hmap [-h|--help] -- Display help"
-    echo "hmap new <NAME>  -- Create hmap called <NAME>"
-end
-
-function __hmap_new --no-scope-shadowing
-    set --local hmap_name $argv[1]
-
-    if test -z "$hmap_name"
-        echo "hmap new: expected NAME" >&2
-        return 1
-    end
-
-    if __is_live_hmap
-        echo "hmap new: '$hmap_name' already exists" >&2
-        return 1
-    end
-
-    # name may have gone out of scope and left stale proxy function
-    # if type resolves to stale proxy we can overwrite it
-    if type -q $hmap_name; and not __is_hmap_proxy
-        echo "hmap new: command '$hmap_name' already exists" >&2
-        return 1
-    end
-
-    function $hmap_name --description __hmap_proxy --no-scope-shadowing
-        set --local hmap_name (status current-function)
-
-        # variable is dereferenced and proxy still in global scope
-        # unset proxy function and fail
-        if not __is_live_hmap
-            echo "$hmap_name: hmap is out of scope" >&2
-            functions -e $hmap_name
+            echo "hmap: unknown subcommand '$argv[1]'" >&2
             return 1
+    end
+end
+
+function __hmap_help
+    echo "hmap [-h|--help]"
+    echo "hmap new NAME"
+    echo "hmap set MAP KEY [VALUE...]"
+    echo "hmap get MAP KEY [DEFAULT]"
+    echo "hmap has MAP KEY"
+    echo "hmap unset MAP KEY"
+    echo "hmap assign MAP [KEY VALUE ...]"
+    echo "hmap merge DESTINATION SOURCE"
+    echo "hmap clear MAP"
+    echo "hmap keys MAP"
+    echo "hmap values MAP"
+    echo "hmap length MAP"
+    echo
+    echo "Examples:"
+    echo "    hmap new foo"
+    echo "    hmap set \$foo name Joel"
+    echo "    hmap get \$foo name"
+end
+
+function __hmap_require_live -a operation handle --no-scope-shadowing
+    if not __hmap_is_live $handle
+        echo "hmap $operation: '$handle' is not an hmap" >&2
+        return 1
+    end
+
+    return 0
+end
+
+# new writes into the caller's scope, so reserve names that could collide
+# with function, argparse, or implementation variables.
+function __hmap_new -a __hmap_name --no-scope-shadowing
+    argparse -n 'hmap new' -N 1 -X 1 -s -- $argv
+    or return
+
+    if not string match -qr '^[A-Za-z0-9_]+$' -- "$__hmap_name"
+        echo "hmap new: invalid NAME '$__hmap_name'" >&2
+        return 1
+    end
+
+    if string match -qr '^(argv|argv_opts|_flag_.*|__hmap_.*)$' -- "$__hmap_name"
+        echo "hmap new: reserved NAME '$__hmap_name'" >&2
+        return 1
+    end
+
+    if set -q $__hmap_name
+        echo "hmap new: '$__hmap_name' already exists" >&2
+        return 1
+    end
+
+    set --local __hmap_handle (__hmap_handle)
+    set -- $__hmap_name $__hmap_handle
+    set {$__hmap_handle}_registered 1
+    set {$__hmap_handle}_keys
+
+    return 0
+end
+
+function __hmap_set -a handle key --no-scope-shadowing
+    argparse -n 'hmap set' -N 2 -s -- $argv
+    or return
+
+    __hmap_require_live set $handle; or return
+
+    set --local keys {$handle}_keys
+    set --local entry (__hmap_entry_variable $handle $key)
+
+    set -q $entry; or set -a -- $keys $key
+
+    set -- $entry $argv[3..]
+    return 0
+end
+
+function __hmap_get -a handle key default --no-scope-shadowing
+    argparse -n 'hmap get' -N 2 -X 3 -s -- $argv
+    or return
+
+    __hmap_require_live get $handle; or return
+
+    set --local entry (__hmap_entry_variable $handle $key)
+
+    if not set -q $entry
+        if test (count $argv) -eq 3
+            printf '%s\n' $default
+            return 0
         end
-        __hmap_dispatch $argv
-    end
 
-    # register function creation to detect scope leakage
-    set (__hmap_registration_name) 1
-end
-
-function __hmap_dispatch -a operation --no-scope-shadowing
-    set --local prefix (__hmap_variable_prefix)
-    set --local keys "$prefix"_keys
-
-    switch $operation
-        case set
-            __hmap_set $argv[2..]
-
-        case get
-            __hmap_get $argv[2..]; or return
-
-        case has
-            if test (count $argv) -lt 2; or test -z "$argv[2]"
-                echo "$hmap_name: has expected KEY" >&2
-                return 1
-            end
-            contains -- $argv[2] $$keys
-
-        case assign
-            __hmap_assign $argv[2..]
-
-        case merge
-            __hmap_merge $argv[2..]
-
-        case unset
-            __hmap_unset $argv[2..]
-
-        case clear
-            __hmap_clear
-
-        case keys
-            set -q {$keys}[1]; and printf '%s\n' $$keys
-
-        case values
-            __hmap_values
-
-        case length
-            printf '%s\n' (count $$keys)
-
-        case '*'
-            echo "$hmap_name: unknown operation '$operation'" >&2
-            return 1
-    end
-end
-
-function __hmap_set -a key --no-scope-shadowing
-    if test -z "$key"
-        echo "$hmap_name: set expected KEY" >&2
         return 1
     end
 
-    set --local entry (__hmap_entry_variable $prefix $key)
+    set -q {$entry}[1]; and printf '%s\n' $$entry
 
-    if not set -q $entry
-        set -a $keys $key
-    end
-
-    set $entry $argv[2..]
+    return 0
 end
 
-function __hmap_get -a key default --no-scope-shadowing
-    if test -z "$key"
-        echo "$hmap_name: get expected KEY" >&2
-        return 1
-    end
+function __hmap_has -a handle key --no-scope-shadowing
+    argparse -n 'hmap has' -N 2 -X 2 -s -- $argv
+    or return
 
-    set --local entry (__hmap_entry_variable $prefix $key)
+    __hmap_require_live has $handle; or return
 
-    if not set -q $entry
-        test -n "$default"; and printf '%s\n' $default; and return
-        or return
-    end
-
-    printf '%s\n' $$entry
+    set --local keys {$handle}_keys
+    contains -- $key $$keys
 end
 
-function __hmap_assign --no-scope-shadowing
-    if test (math (count $argv) % 2) -ne 0
-        echo "$hmap_name: assign expected KEY VALUE pairs" >&2
-        return 1
-    end
+function __hmap_unset -a handle key --no-scope-shadowing
+    argparse -n 'hmap unset' -N 2 -X 2 -s -- $argv
+    or return
 
-    for i in (seq 1 2 (count $argv))
-        __hmap_set $argv[$i] $argv[(math $i + 1)]
-    end
-end
+    __hmap_require_live unset $handle; or return
 
-function __hmap_merge --no-scope-shadowing
-    set --local other $argv[1]
-
-    if test -z "$other"
-        echo "$hmap_name: merge expected NAME" >&2
-        return 1
-    end
-
-    if not __is_named_live_hmap $other
-        echo "$hmap_name: merge '$other' is not an hmap" >&2
-        return 1
-    end
-
-    set --local other_keys ($other keys)
-
-    for key in $other_keys
-        set --local other_value ($other get $key)
-        __hmap_set $key $other_value
-    end
-end
-
-function __hmap_unset -a key --no-scope-shadowing
-    if test -z "$key"
-        echo "$hmap_name: unset expected KEY" >&2
-        return 1
-    end
-
-    set --local entry (__hmap_entry_variable $prefix $key)
-    set -e $entry
+    set --local keys {$handle}_keys
+    set -e (__hmap_entry_variable $handle $key)
 
     set --local index (contains --index -- $key $$keys)
-    if test -n "$index"
-        set -e {$keys}[$index]
-    end
+    test -n "$index"; and set -e {$keys}[$index]
+
+    return 0
 end
 
-function __hmap_clear --no-scope-shadowing
+function __hmap_assign -a handle --no-scope-shadowing
+    argparse -n 'hmap assign' -N 1 -s -- $argv
+    or return
+
+    __hmap_require_live assign $handle; or return
+
+    if test (math (count $argv[2..]) % 2) -ne 0
+        echo "hmap assign: expected KEY VALUE pairs" >&2
+        return 1
+    end
+
+    if test (count $argv) -ge 3
+        for index in (seq 2 2 (count $argv))
+            __hmap_set $handle $argv[$index] $argv[(math $index + 1)]; or return
+        end
+    end
+
+    return 0
+end
+
+function __hmap_merge -a destination source --no-scope-shadowing
+    argparse -n 'hmap merge' -N 2 -X 2 -s -- $argv
+    or return
+
+    __hmap_require_live merge $destination; or return
+    __hmap_require_live merge $source; or return
+
+    set --local source_keys {$source}_keys
+    for key in $$source_keys
+        set --local entry (__hmap_entry_variable $source $key)
+        __hmap_set $destination $key $$entry; or return
+    end
+
+    return 0
+end
+
+function __hmap_clear -a handle --no-scope-shadowing
+    argparse -n 'hmap clear' -N 1 -X 1 -s -- $argv
+    or return
+
+    __hmap_require_live clear $handle; or return
+
+    set --local keys {$handle}_keys
     for key in $$keys
-        __hmap_unset $key
+        __hmap_unset $handle $key; or return
     end
+
+    return 0
 end
 
-function __hmap_values --no-scope-shadowing
+function __hmap_keys -a handle --no-scope-shadowing
+    argparse -n 'hmap keys' -N 1 -X 1 -s -- $argv
+    or return
+
+    __hmap_require_live keys $handle; or return
+
+    set --local keys {$handle}_keys
+    set -q {$keys}[1]; and printf '%s\n' $$keys
+
+    return 0
+end
+
+function __hmap_values -a handle --no-scope-shadowing
+    argparse -n 'hmap values' -N 1 -X 1 -s -- $argv
+    or return
+
+    __hmap_require_live values $handle; or return
+
+    set --local keys {$handle}_keys
     set --local vals
 
     for key in $$keys
-        set --local entry (__hmap_entry_variable $prefix $key)
-        set -a vals $$entry
+        set --local entry (__hmap_entry_variable $handle $key)
+        set -a -- vals $$entry
     end
 
-    if test (count $vals) -gt 0
-        printf '%s\n' $vals
-    end
+    set -q vals[1]; and printf '%s\n' $vals
+
+    return 0
 end
 
-function __hmap_entry_variable -a prefix key
-    echo "$prefix"_entry_(__normalise_hmap_variable_string $key)
+function __hmap_length -a handle --no-scope-shadowing
+    argparse -n 'hmap length' -N 1 -X 1 -s -- $argv
+    or return
+
+    __hmap_require_live length $handle; or return
+
+    set --local keys {$handle}_keys
+    printf '%s\n' (count $$keys)
 end
 
-# Proxy and lifecycle machinery
-
-function __is_live_hmap --no-scope-shadowing
-    set -q (__hmap_registration_name)
+function __hmap_handle
+    set -q __hmap_sequence; or set -g __hmap_sequence 0
+    
+    set -g __hmap_sequence (math $__hmap_sequence + 1)
+    echo __hmap_{$fish_pid}_$__hmap_sequence
 end
 
-function __hmap_registration_name --no-scope-shadowing
-    echo (__hmap_variable_prefix)_registered
+function __hmap_is_live -a handle --no-scope-shadowing
+    string match -qr '^__hmap_[A-Za-z0-9_]+$' -- "$handle"; or return 1
+    set -q {$handle}_registered
 end
 
-function __hmap_variable_prefix --no-scope-shadowing
-    set --local normalised (__normalise_hmap_variable_string $hmap_name)
-    echo "__hmap_$normalised"
-end
-
-function __normalise_hmap_variable_string
-    string escape --style=var -- $argv[1]
-end
-
-function __is_hmap_proxy --no-scope-shadowing
-    functions -q $hmap_name; or return
-
-    set --local details (functions --details --verbose $hmap_name)
-
-    test "$details[5]" = __hmap_proxy
-end
-
-function __is_named_live_hmap -a name --no-scope-shadowing
-    set --local hmap_name $name
-    functions -q $hmap_name; or return 1
-    __is_hmap_proxy; or return 1
-    __is_live_hmap
+function __hmap_entry_variable -a handle key
+    echo {$handle}_entry_(string escape --style=var -- $key)
 end
