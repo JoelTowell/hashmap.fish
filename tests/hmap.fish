@@ -69,6 +69,18 @@ function __suite_hmap_set_get
             (count (hmap get $foo e)) -eq 1
     end
 
+    function __case_hmap_get_present_empty_ignores_default
+        hmap new foo
+        hmap set $foo k
+        hmap set $foo e ""
+
+        @echo get: present empty ignores default
+        @test "get of a key with no values does not return the default" \
+            (count (hmap get $foo k DEFAULT)) -eq 0
+        @test "get of an empty value does not return the default" \
+            (hmap get $foo e DEFAULT) = ""
+    end
+
     function __case_hmap_set_dash_key
         hmap new foo
         hmap set $foo -k -v
@@ -138,6 +150,7 @@ function __suite_hmap_set_get
     __case_hmap_set_get_existing_key
     __case_hmap_get_default
     __case_hmap_get_empty_entry
+    __case_hmap_get_present_empty_ignores_default
     __case_hmap_set_dash_key
     __case_hmap_set_get_empty_key
     __case_hmap_escaped_keys
@@ -160,6 +173,19 @@ function __suite_hmap_assign
             (hmap get $foo qux) = "quux"
     end
 
+    function __case_hmap_assign_odd_does_not_mutate
+        hmap new foo
+        hmap set $foo a 1
+
+        @echo assign: odd pairs
+        @test "assign with an odd leftover returns status 1" \
+            (hmap assign $foo b 2 c 2>/dev/null) $status = 1
+        @test "assign with an odd leftover keeps existing keys" \
+            (hmap get $foo a) = "1"
+        @test "assign with an odd leftover does not set a complete pair" \
+            (hmap get $foo b 2>/dev/null) $status = 1
+    end
+
     function __case_hmap_assign_usage
         hmap new foo
 
@@ -171,6 +197,7 @@ function __suite_hmap_assign
     end
 
     __case_hmap_assign
+    __case_hmap_assign_odd_does_not_mutate
     __case_hmap_assign_usage
 end
 
@@ -216,6 +243,33 @@ function __suite_hmap_merge
             (hmap keys $foo | string collect) = (printf '%s\n' bar qux grault | string collect)
     end
 
+    function __case_hmap_merge_self
+        hmap new foo
+        hmap assign $foo \
+            bar baz \
+            qux quux
+
+        hmap merge $foo $foo
+
+        @echo merge: self
+        @test "self-merge keeps values" \
+            (hmap get $foo bar) = "baz"
+        @test "self-merge keeps key order" \
+            (hmap keys $foo | string collect) = (printf '%s\n' bar qux | string collect)
+    end
+
+    function __case_hmap_merge_list_value
+        hmap new foo
+        hmap new src
+        hmap set $src k v1 v2 v3
+
+        hmap merge $foo $src
+
+        @echo merge: list value
+        @test "merge copies a list value" \
+            (hmap get $foo k | string collect) = (printf '%s\n' v1 v2 v3 | string collect)
+    end
+
     function __case_hmap_merge_usage
         hmap new foo
         hmap new bar
@@ -231,6 +285,8 @@ function __suite_hmap_merge
 
     __case_hmap_merge_no_overlapping_keys
     __case_hmap_merge_overlapping_keys
+    __case_hmap_merge_self
+    __case_hmap_merge_list_value
     __case_hmap_merge_usage
 end
 
@@ -342,6 +398,21 @@ function __suite_hmap_unset
             (hmap get $foo bar) = "baz"
     end
 
+    function __case_hmap_unset_then_set_appends
+        hmap new foo
+        hmap assign $foo \
+            a 1 \
+            b 2 \
+            c 3
+
+        hmap unset $foo a
+        hmap set $foo a 4
+
+        @echo unset: reinsert
+        @test "unset then set appends the key" \
+            (hmap keys $foo | string collect) = (printf '%s\n' b c a | string collect)
+    end
+
     function __case_hmap_unset_usage
         hmap new foo
 
@@ -364,6 +435,7 @@ function __suite_hmap_unset
 
     __case_hmap_unset_middle_key
     __case_hmap_unset_missing_key
+    __case_hmap_unset_then_set_appends
     __case_hmap_unset_usage
     __case_hmap_unset_status
 end
@@ -382,6 +454,10 @@ function __suite_hmap_clear
             (count (hmap keys $foo)) -eq 0
         @test "clear on empty returns status 0" \
             (hmap clear $foo) $status = 0
+
+        hmap set $foo a 1
+        @test "cleared hmap can be populated again" \
+            (hmap get $foo a) = "1"
     end
 
     function __case_hmap_clear_usage
@@ -476,32 +552,6 @@ function __suite_hmap_new
             $foo != $bar
     end
 
-    function __case_hmap_new_copied_handle_survives_recreate
-        hmap new foo
-        hmap set $foo x OLD
-        set bar $foo
-        set -e foo
-        hmap new foo
-        hmap set $foo x NEW
-
-        @echo new: copied handle
-        @test "copied handle keeps the old hmap" \
-            (hmap get $bar x) = "OLD"
-        @test "reused name refers to the new hmap" \
-            (hmap get $foo x) = "NEW"
-    end
-
-    function __case_hmap_new_scope
-        function __hmap_new_in_helper
-            hmap new foo
-        end
-        __hmap_new_in_helper
-
-        @echo new: scope
-        @test "hmap does not leak from a function" \
-            (set -q foo) $status = 1
-    end
-
     function __case_hmap_new_usage
         hmap new foo
 
@@ -535,6 +585,71 @@ function __suite_hmap_new
             (hmap get $123 x) = "1"
     end
 
+    function __case_hmap_new_status
+        @echo new: status
+        __hmap_status_test_fails
+        @test "new after a prior failure returns status 0" \
+            (hmap new baz) $status = 0
+    end
+
+    __case_hmap_new_handle
+    __case_hmap_new_usage
+    __case_hmap_new_reserved_names
+    __case_hmap_new_digit_name
+    __case_hmap_new_status
+end
+
+function __suite_hmap_references
+    function __case_hmap_shared_identity
+        hmap new foo
+        set bar $foo
+        hmap set $bar x 1
+
+        @echo references: shared identity
+        @test "alias sees the same hmap" \
+            (hmap get $foo x) = "1"
+    end
+
+    function __case_hmap_copied_handle_survives_recreate
+        hmap new foo
+        hmap set $foo x OLD
+        set bar $foo
+        set -e foo
+        hmap new foo
+        hmap set $foo x NEW
+
+        @echo references: copied handle
+        @test "copied handle keeps the old hmap" \
+            (hmap get $bar x) = "OLD"
+        @test "reused name refers to the new hmap" \
+            (hmap get $foo x) = "NEW"
+    end
+
+    function __case_hmap_unregistered_handle
+        set --local dead __hmap_{$fish_pid}_999999999
+
+        @echo references: unregistered handle
+        @test "a well-formed unregistered handle is not an hmap" \
+            (hmap get $dead x 2>/dev/null) $status = 1
+    end
+
+    __case_hmap_shared_identity
+    __case_hmap_copied_handle_survives_recreate
+    __case_hmap_unregistered_handle
+end
+
+function __suite_hmap_scope
+    function __case_hmap_new_scope
+        function __hmap_new_in_helper
+            hmap new foo
+        end
+        __hmap_new_in_helper
+
+        @echo scope: leak
+        @test "hmap does not leak from a function" \
+            (set -q foo) $status = 1
+    end
+
     function __case_hmap_new_inner_scope
         hmap new foo
         hmap set $foo x OUTER
@@ -545,7 +660,7 @@ function __suite_hmap_new
         end
         __hmap_inner_foo
 
-        @echo new: inner scope
+        @echo scope: inner
         @test "inner hmap does not disturb the outer hmap" \
             (hmap get $foo x) = "OUTER"
     end
@@ -561,27 +676,29 @@ function __suite_hmap_new
             hmap get $handle x
         end
 
-        @echo handle: across functions
+        @echo scope: callee
         @test "handle does not work in a callee" \
             (__hmap_outer >/dev/null 2>&1) $status = 1
     end
 
-    function __case_hmap_new_status
-        @echo new: status
-        __hmap_status_test_fails
-        @test "new after a prior failure returns status 0" \
-            (hmap new baz) $status = 0
+    function __case_hmap_escaped_handle_dies
+        function __hmap_escape_handle
+            hmap new foo
+            hmap set $foo x 1
+            set -g __hmap_escaped $foo
+        end
+        __hmap_escape_handle
+
+        @echo scope: escaped handle
+        @test "escaped handle is dead after the function returns" \
+            (hmap get $__hmap_escaped x 2>/dev/null) $status = 1
+        set -e __hmap_escaped
     end
 
-    __case_hmap_new_handle
-    __case_hmap_new_copied_handle_survives_recreate
     __case_hmap_new_scope
-    __case_hmap_new_usage
-    __case_hmap_new_reserved_names
-    __case_hmap_new_digit_name
     __case_hmap_new_inner_scope
     __case_hmap_handle_across_function_boundary
-    __case_hmap_new_status
+    __case_hmap_escaped_handle_dies
 end
 
 function __suite_hmap_dispatch
@@ -613,4 +730,6 @@ __suite_hmap_clear
 __suite_hmap_has
 __suite_hmap_length
 __suite_hmap_new
+__suite_hmap_references
+__suite_hmap_scope
 __suite_hmap_dispatch
