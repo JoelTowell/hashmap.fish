@@ -2,15 +2,30 @@ name: hmap CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
 
 jobs:
   test:
+    strategy:
+      fail-fast: false
+      matrix:
+        fish_major: [3, 4]
+
     runs-on: ubuntu-latest
+    name: fish ${{ matrix.fish_major }}
+
     steps:
       - uses: actions/checkout@v4
-      - uses: fish-shop/install-fish-shell@v2
+
+      - name: Install fish ${{ matrix.fish_major }}
+        run: |
+          sudo apt-add-repository --yes --no-update \
+            ppa:fish-shell/release-${{ matrix.fish_major }}
+          sudo apt-get update --quiet=2
+          sudo apt-get install --yes fish
+          fish --version
+
       - name: Run Fishtape tests
         uses: fish-shop/run-fishtape-tests@v2
         with:
