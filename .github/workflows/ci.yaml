@@ -10,8 +10,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: fish-shop/install-fish-shell@v2
+      - name: Install fish 4
+        uses: fish-shop/install-fish-shell@v2
       - name: Run Fishtape tests
         uses: fish-shop/run-fishtape-tests@v2
         with:
           patterns: tests/*.fish
+  lint:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install fish 4
+        uses: fish-shop/install-fish-shell@v2
+      - name: Check indent
+        uses: fish-shop/indent-check@v2
+        with:
+          patterns: completions/*.fish functions/*.fish tests/*.fish

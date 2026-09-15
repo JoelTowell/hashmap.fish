@@ -12,9 +12,9 @@ function __suite_hmap_set_get
 
         @echo set/get
         @test "get returns the first key's value" \
-            (hmap get $foo bar) = "baz"
+            (hmap get $foo bar) = baz
         @test "get returns the second key's value" \
-            (hmap get $foo qux) = "quux"
+            (hmap get $foo qux) = quux
     end
 
     function __case_hmap_set_list
@@ -41,7 +41,7 @@ function __suite_hmap_set_get
 
         @echo set: existing key
         @test "set on an existing key overwrites" \
-            (hmap get $foo bar) = "quux"
+            (hmap get $foo bar) = quux
     end
 
     function __case_hmap_get_default
@@ -50,7 +50,7 @@ function __suite_hmap_set_get
 
         @echo get: default
         @test "get missing key returns the default" \
-            (hmap get $foo qux default) = "default"
+            (hmap get $foo qux default) = default
     end
 
     function __case_hmap_get_empty_entry
@@ -87,7 +87,7 @@ function __suite_hmap_set_get
 
         @echo set/get: dash-prefixed
         @test "get returns a dash-prefixed key" \
-            (hmap get $foo -k) = "-v"
+            (hmap get $foo -k) = -v
     end
 
     function __case_hmap_set_get_empty_key
@@ -96,7 +96,7 @@ function __suite_hmap_set_get
 
         @echo set/get: empty key
         @test "get returns the value for an empty key" \
-            (hmap get $foo "") = "empty-key-value"
+            (hmap get $foo "") = empty-key-value
         @test "keys includes the empty key" \
             (hmap keys $foo | string collect) = (printf '%s\n' "" | string collect)
     end
@@ -108,9 +108,9 @@ function __suite_hmap_set_get
 
         @echo set/get: dotted and spaced keys
         @test "get returns a dotted key" \
-            (hmap get $foo user.name) = "Joel"
+            (hmap get $foo user.name) = Joel
         @test "get returns a key with a space" \
-            (hmap get $foo "a b") = "spaced"
+            (hmap get $foo "a b") = spaced
         @test "keys returns dotted and spaced keys" \
             (hmap keys $foo | string collect) = (printf '%s\n' user.name "a b" | string collect)
     end
@@ -168,9 +168,9 @@ function __suite_hmap_assign
 
         @echo assign
         @test "assign sets the first pair" \
-            (hmap get $foo bar) = "baz"
+            (hmap get $foo bar) = baz
         @test "assign sets the second pair" \
-            (hmap get $foo qux) = "quux"
+            (hmap get $foo qux) = quux
     end
 
     function __case_hmap_assign_odd_does_not_mutate
@@ -181,7 +181,7 @@ function __suite_hmap_assign
         @test "assign with an odd leftover returns status 1" \
             (hmap assign $foo b 2 c 2>/dev/null) $status = 1
         @test "assign with an odd leftover keeps existing keys" \
-            (hmap get $foo a) = "1"
+            (hmap get $foo a) = 1
         @test "assign with an odd leftover does not set a complete pair" \
             (hmap get $foo b 2>/dev/null) $status = 1
     end
@@ -216,9 +216,9 @@ function __suite_hmap_merge
 
         @echo merge: no overlapping keys
         @test "merge keeps existing values" \
-            (hmap get $foo bar) = "baz"
+            (hmap get $foo bar) = baz
         @test "merge adds keys from the other hmap" \
-            (hmap get $foo baz) = "quux"
+            (hmap get $foo baz) = quux
         @test "merge appends new keys after existing keys" \
             (hmap keys $foo | string collect) = (printf '%s\n' bar qux baz | string collect)
     end
@@ -238,7 +238,7 @@ function __suite_hmap_merge
 
         @echo merge: overlapping keys
         @test "merge overrides overlapping values" \
-            (hmap get $foo bar) = "corge"
+            (hmap get $foo bar) = corge
         @test "merge does not duplicate overlapping keys" \
             (hmap keys $foo | string collect) = (printf '%s\n' bar qux grault | string collect)
     end
@@ -253,7 +253,7 @@ function __suite_hmap_merge
 
         @echo merge: self
         @test "self-merge keeps values" \
-            (hmap get $foo bar) = "baz"
+            (hmap get $foo bar) = baz
         @test "self-merge keeps key order" \
             (hmap keys $foo | string collect) = (printf '%s\n' bar qux | string collect)
     end
@@ -383,7 +383,7 @@ function __suite_hmap_unset
         @test "unset middle key removes it" \
             (hmap get $foo qux 2>/dev/null) $status = 1
         @test "unset middle key keeps the last key" \
-            (hmap get $foo corge) = "grault"
+            (hmap get $foo corge) = grault
         @test "unset middle key closes the hole in keys" \
             (hmap keys $foo | string collect) = (printf '%s\n' bar corge | string collect)
     end
@@ -395,7 +395,7 @@ function __suite_hmap_unset
 
         @echo unset: missing key
         @test "unset missing key leaves existing keys" \
-            (hmap get $foo bar) = "baz"
+            (hmap get $foo bar) = baz
     end
 
     function __case_hmap_unset_then_set_appends
@@ -457,7 +457,7 @@ function __suite_hmap_clear
 
         hmap set $foo a 1
         @test "cleared hmap can be populated again" \
-            (hmap get $foo a) = "1"
+            (hmap get $foo a) = 1
     end
 
     function __case_hmap_clear_usage
@@ -582,7 +582,7 @@ function __suite_hmap_new
 
         @echo new: digit name
         @test "get works with a digit-only NAME" \
-            (hmap get $123 x) = "1"
+            (hmap get $123 x) = 1
     end
 
     function __case_hmap_new_status
@@ -607,7 +607,7 @@ function __suite_hmap_references
 
         @echo references: shared identity
         @test "alias sees the same hmap" \
-            (hmap get $foo x) = "1"
+            (hmap get $foo x) = 1
     end
 
     function __case_hmap_copied_handle_survives_recreate
@@ -620,9 +620,9 @@ function __suite_hmap_references
 
         @echo references: copied handle
         @test "copied handle keeps the old hmap" \
-            (hmap get $bar x) = "OLD"
+            (hmap get $bar x) = OLD
         @test "reused name refers to the new hmap" \
-            (hmap get $foo x) = "NEW"
+            (hmap get $foo x) = NEW
     end
 
     function __case_hmap_unregistered_handle
@@ -662,7 +662,7 @@ function __suite_hmap_scope
 
         @echo scope: inner
         @test "inner hmap does not disturb the outer hmap" \
-            (hmap get $foo x) = "OUTER"
+            (hmap get $foo x) = OUTER
     end
 
     function __case_hmap_handle_across_function_boundary
