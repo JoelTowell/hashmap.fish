@@ -229,7 +229,7 @@ end
 
 function __hmap_handle
     set -q __hmap_sequence; or set -g __hmap_sequence 0
-    
+
     set -g __hmap_sequence (math $__hmap_sequence + 1)
     echo __hmap_{$fish_pid}_$__hmap_sequence
 end
