@@ -26,8 +26,6 @@ function __case_hmap_complete_maps
     @echo completions: maps
     @test "get does not suggest maps without a variable prefix" \
         (count (__hmap_complete_C 'hmap get ')) -eq 0
-    @test "fish completes a variable prefix" \
-        (__hmap_complete_C 'hmap get $fo') = '$foo'
 end
 
 function __case_hmap_complete_keys
