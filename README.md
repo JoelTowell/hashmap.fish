@@ -1,19 +1,10 @@
 # hmap
 
-Hash maps for Fish, aiming to feel as close to a first-class Fish data structure as reasonably possible.
-
-```fish
-hmap new foo
-hmap set $foo name Ada
-hmap get $foo name
-# Ada
-```
+Hash maps for Fish with list-valued entries, shared mutable references, insertion ordering, and a lifetime that follows Fish scope.
 
 ## Motivation
 
-Fish does not have a native associative-array / hash-map type. You can fake one with a paired list, or keep two arrays in sync, and for a lot of scripts that is enough.
-
-I wanted something that behaves a little more like a normal mutable data structure: held in a variable, with list-valued entries, shared references, and a lifetime that follows Fish scope.
+Fish has no native associative-array / hash-map type. Paired lists are enough for many simpler cases. `hmap` is for when richer map-like semantics are useful.
 
 ## Requirements
 
@@ -21,13 +12,11 @@ I wanted something that behaves a little more like a normal mutable data structu
 
 ## Installation
 
-The intended path is [Fisher](https://github.com/jorgebucaran/fisher), but that is not set up yet:
+Install with [Fisher](https://github.com/jorgebucaran/fisher):
 
 ```fish
 fisher install JoelTowell/hashmap.fish
 ```
-
-For now, clone the repository to try it.
 
 ## Usage
 
@@ -51,7 +40,20 @@ if hmap has $opts port
 end
 ```
 
-`new` takes a variable name because it creates the variable. Other commands take `$opts`, the value referring to the map. `hmap set opts ...` passes the literal string `opts`, which is not a map.
+`hmap new NAME` takes a variable name because it creates the variable. Other commands take the map reference stored in that variable:
+
+```fish
+hmap new opts
+hmap set $opts name Ada
+```
+
+is correct, while:
+
+```fish
+hmap set opts name Ada
+```
+
+passes the literal string `opts` rather than the map.
 
 ```fish
 hmap new NAME
@@ -73,21 +75,17 @@ hmap length MAP
 
 `set` accepts zero, one, or several values.
 
-`get` returns status `1` for a missing key; an optional default is used only when the key is missing.
+`get` returns status `1` for a missing key. An optional default is used only when the key is missing.
 
 `has` returns status `0` when the key exists and `1` otherwise.
 
-`is` is the same check for whether a value is an hmap.
-
-`unset` removes a key.
+`is` returns status `0` if its argument refers to an hmap and `1` otherwise.
 
 `assign` takes scalar `KEY VALUE` pairs.
 
-`merge` overlays one map onto another.
+`length` counts keys.
 
-`clear` removes every key.
-
-For iteration, loop over `keys`. `length` counts keys, not values. `values` prints values in key order and flattens list-valued entries, so it is not a round-trip representation:
+`values` flattens list-valued entries, so it is not a round-trip representation.
 
 ```fish
 for key in (hmap keys $opts)
@@ -97,9 +95,19 @@ end
 
 ## Properties
 
+### List-valued entries
+
+A key can hold several Fish values:
+
+```fish
+hmap set $foo colours red green blue
+```
+
+`set` with no values still creates the key. `set KEY ""` stores one empty string. A key that has never been set is missing; that is when `get`'s default applies.
+
 ### Reference semantics
 
-Assigning an hmap to another variable does not copy its contents. Both variables refer to the same mutable map:
+Assigning an hmap reference to another variable does not copy the map. Both variables refer to the same mutable map:
 
 ```fish
 set bar $foo
@@ -109,19 +117,9 @@ hmap get $foo y
 # 2
 ```
 
-### List-valued entries
-
-A key can hold several Fish values:
-
-```fish
-hmap set $foo colours red green blue
-```
-
-`set` with no values still creates the key. `set KEY ""` stores one empty string. A key that was never set is missing, which is what makes `get`'s default fire.
-
 ### Scoped lifetime
 
-A local hmap disappears with its Fish scope:
+A local hmap disappears when its Fish scope ends:
 
 ```fish
 function demo
@@ -135,7 +133,7 @@ demo
 
 ### Ordering
 
-Keys keep insertion order. Updating a key leaves it in place; removing and recreating it appends it.
+Keys keep insertion order. Updating an existing key leaves it in place; removing and recreating a key appends it to the end.
 
 ```fish
 hmap assign $foo \
@@ -177,9 +175,9 @@ This is a consequence of Fish scoping. Assigning the map to another variable in 
 
 ## Inspiration and alternatives
 
-[`mattmc3/dict.fish`](https://github.com/mattmc3/dict.fish) is the project that kicked this off. It showed that dictionary-like behaviour in Fish can be both simple and useful with a deliberately small paired-list approach.
+[`mattmc3/dict.fish`](https://github.com/mattmc3/dict.fish) influenced `hmap`. Its paired-list approach is a simple way to represent dictionaries in Fish and works well for many small scripts.
 
-`hmap` explores a different trade-off for list-valued entries, shared mutable references, and scoped map behaviour. If the paired-list approach better fits what you need, check out [dict.fish](https://github.com/mattmc3/dict.fish).
+`hmap` takes a different approach, with list-valued entries, shared references, scoped lifetime, insertion ordering, and a more map-oriented API. If the simpler paired-list approach better fits your needs, `dict.fish` is worth checking out.
 
 ## Contributing
 
