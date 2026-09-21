@@ -103,12 +103,12 @@ function __suite_hmap_set_get
 
     function __case_hmap_escaped_keys
         hmap new foo
-        hmap set $foo user.name Joel
+        hmap set $foo user.name Ada
         hmap set $foo "a b" spaced
 
         @echo set/get: dotted and spaced keys
         @test "get returns a dotted key" \
-            (hmap get $foo user.name) = Joel
+            (hmap get $foo user.name) = Ada
         @test "get returns a key with a space" \
             (hmap get $foo "a b") = spaced
         @test "keys returns dotted and spaced keys" \
@@ -452,6 +452,10 @@ function __suite_hmap_clear
         @echo clear
         @test "clear leaves no keys" \
             (count (hmap keys $foo)) -eq 0
+        @test "clear removes entry values" \
+            (hmap get $foo bar) $status = 1
+        @test "clear removes entry presence" \
+            (hmap has $foo qux) $status = 1
         @test "clear on empty returns status 0" \
             (hmap clear $foo) $status = 0
 
@@ -482,6 +486,13 @@ function __suite_hmap_has
             (hmap has $foo bar) $status = 0
         @test "has returns false for a missing key" \
             (hmap has $foo qux) $status = 1
+
+        hmap set $foo empty
+        hmap set $foo "" ""
+        @test "has returns true for a key with no values" \
+            (hmap has $foo empty) $status = 0
+        @test "has returns true for an empty key and value" \
+            (hmap has $foo "") $status = 0
     end
 
     function __case_hmap_has_usage
@@ -496,6 +507,21 @@ function __suite_hmap_has
 
     __case_hmap_has
     __case_hmap_has_usage
+end
+
+function __suite_hmap_is
+    function __case_hmap_is
+        hmap new foo
+        set bar "garbage"
+
+        @echo is
+        @test "is returns true for a live hmap" \
+            (hmap is $foo) $status = 0
+        @test "is returns false for a non-hmap" \
+            (hmap is $bar) $status = 1
+    end
+
+    __case_hmap_is
 end
 
 function __suite_hmap_length
@@ -728,6 +754,7 @@ __suite_hmap_values
 __suite_hmap_unset
 __suite_hmap_clear
 __suite_hmap_has
+__suite_hmap_is
 __suite_hmap_length
 __suite_hmap_new
 __suite_hmap_references

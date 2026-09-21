@@ -8,7 +8,7 @@ function hmap --no-scope-shadowing
     end
 
     switch $argv[1]
-        case new set get has unset assign merge clear keys values length
+        case new set get has unset assign merge clear keys values length is
             __hmap_$argv[1] $argv[2..]
         case '*'
             echo "hmap: unknown subcommand '$argv[1]'" >&2
@@ -22,6 +22,7 @@ function __hmap_help
     echo "hmap set MAP KEY [VALUE...]"
     echo "hmap get MAP KEY [DEFAULT]"
     echo "hmap has MAP KEY"
+    echo "hmap is MAP"
     echo "hmap unset MAP KEY"
     echo "hmap assign MAP [KEY VALUE ...]"
     echo "hmap merge DESTINATION SOURCE"
@@ -32,7 +33,7 @@ function __hmap_help
     echo
     echo "Examples:"
     echo "    hmap new foo"
-    echo "    hmap set \$foo name Joel"
+    echo "    hmap set \$foo name Ada"
     echo "    hmap get \$foo name"
 end
 
@@ -68,7 +69,6 @@ function __hmap_new -a __hmap_name --no-scope-shadowing
 
     set --local __hmap_handle (__hmap_handle)
     set -- $__hmap_name $__hmap_handle
-    set {$__hmap_handle}_registered 1
     set {$__hmap_handle}_keys
 
     return 0
@@ -117,8 +117,7 @@ function __hmap_has -a handle key --no-scope-shadowing
 
     __hmap_require_live has $handle; or return
 
-    set --local keys {$handle}_keys
-    contains -- $key $$keys
+    set -q (__hmap_entry_variable $handle $key)
 end
 
 function __hmap_unset -a handle key --no-scope-shadowing
@@ -180,8 +179,9 @@ function __hmap_clear -a handle --no-scope-shadowing
 
     set --local keys {$handle}_keys
     for key in $$keys
-        __hmap_unset $handle $key; or return
+        set -e (__hmap_entry_variable $handle $key)
     end
+    set -- $keys
 
     return 0
 end
@@ -217,6 +217,13 @@ function __hmap_values -a handle --no-scope-shadowing
     return 0
 end
 
+function __hmap_is -a handle --no-scope-shadowing
+    argparse -n 'hmap is' -N 1 -X 1 -s -- $argv
+    or return
+
+    __hmap_is_live $handle
+end
+
 function __hmap_length -a handle --no-scope-shadowing
     argparse -n 'hmap length' -N 1 -X 1 -s -- $argv
     or return
@@ -236,7 +243,8 @@ end
 
 function __hmap_is_live -a handle --no-scope-shadowing
     string match -qr '^__hmap_[A-Za-z0-9_]+$' -- "$handle"; or return 1
-    set -q {$handle}_registered
+    # keys existence reliably tracks hmap registration
+    set -q {$handle}_keys
 end
 
 function __hmap_entry_variable -a handle key
