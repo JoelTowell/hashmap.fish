@@ -7,9 +7,9 @@ source (status dirname)/../completions/hmap.fish
 
 hmap new foo
 hmap assign $foo \
-    name Joel \
-    user.name dotted \
-    "full name" "Joel T" \
+    name Ada \
+    user.name ada \
+    "full name" "Ada Lovelace" \
     -k dashv
 
 function __hmap_complete_C
@@ -19,7 +19,7 @@ end
 function __case_hmap_complete_verbs
     @echo completions: subcommands
     @test "hmap tab completes subcommands" \
-        (__hmap_complete_C 'hmap ' | string collect) = (printf '%s\n' assign clear get has keys length merge new set unset values | string collect)
+        (__hmap_complete_C 'hmap ' | string collect) = (printf '%s\n' assign clear get has is keys length merge new set unset values | string collect)
 end
 
 function __case_hmap_complete_maps
@@ -34,6 +34,14 @@ function __case_hmap_complete_keys
         (__hmap_complete_C 'hmap get $foo ' | string collect) = (printf '%s\n' name user.name "full name" -k | string collect)
     @test "get completes a key prefix" \
         (__hmap_complete_C 'hmap get $foo na') = name
+    for verb in get has unset set
+        @test "$verb completes keys after an option separator" \
+            (__hmap_complete_C "hmap -- $verb \$foo " | string collect) = (printf '%s\n' name user.name "full name" -k | string collect)
+    end
+    @test "get completes a key prefix after an option separator" \
+        (__hmap_complete_C 'hmap -- get $foo na') = name
+    @test "get does not complete keys in the default position after an option separator" \
+        (count (__hmap_complete_C 'hmap -- get $foo name ')) -eq 0
     @test "keys does not complete keys" \
         (count (__hmap_complete_C 'hmap keys $foo ')) -eq 0
     @test "a key named assign does not enable key completion in values" \
