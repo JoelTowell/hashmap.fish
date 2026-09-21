@@ -512,7 +512,7 @@ end
 function __suite_hmap_is
     function __case_hmap_is
         hmap new foo
-        set bar "garbage"
+        set bar garbage
 
         @echo is
         @test "is returns true for a live hmap" \
