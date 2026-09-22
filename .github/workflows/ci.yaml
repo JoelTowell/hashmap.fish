@@ -27,3 +27,14 @@ jobs:
         uses: fish-shop/indent-check@v2
         with:
           patterns: completions/*.fish functions/*.fish tests/*.fish
+
+  release:
+    needs: [test, lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haya14busa/action-bumpr@v1
